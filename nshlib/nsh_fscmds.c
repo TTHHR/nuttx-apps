@@ -2183,6 +2183,19 @@ int cmd_mkdir(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv)
       for (; ; )
         {
           slash = strchr(slash, '/');
+
+          /* Never attempt to create an empty path: with 'parent' set and an
+           * absolute path, the first component found is the leading '/'.
+           * Truncating there would make fullpath an empty string and
+           * mkdir("") fails with ENOENT.
+           */
+
+          if (slash != NULL && slash == fullpath)
+            {
+              slash++;
+              continue;
+            }
+
           if (slash != NULL)
             {
               *slash = '\0';
@@ -2190,11 +2203,18 @@ int cmd_mkdir(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv)
 
           ret = mkdir(fullpath, 0777);
 
-          if (ret < 0 && (errno != EEXIST || !parent))
+          if (ret < 0)
             {
-              nsh_error(vtbl, g_fmtcmdfailed,
-                        fullpath, "mkdir", NSH_ERRNO);
-              break;
+              if (errno != EEXIST || !parent)
+                {
+                  nsh_error(vtbl, g_fmtcmdfailed,
+                            fullpath, "mkdir", NSH_ERRNO);
+                  break;
+                }
+
+              /* The directory already exists and -p was given: success */
+
+              ret = OK;
             }
 
           if (slash != NULL)
